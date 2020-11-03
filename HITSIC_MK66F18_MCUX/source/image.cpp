@@ -1,15 +1,7 @@
-/*
- * image.cpp
- *
- *  Created on: 2020年11月14日
- *      Author: 刘馨元
- */
-
 #include "image.hpp"
-#include <math.h>
+#include <iostream>
 
-
-int f[10 * CAMERA_H];//考察连通域联通性
+int f[30 * CAMERA_H];//考察连通域联通性
 //每个白条子属性
 typedef struct {
     uint8_t   left;//左边界
@@ -46,6 +38,11 @@ uint8_t top_road;//赛道最高处所在行数
 uint32_t threshold = 160; //阈值
 uint32_t prospect = 45; //前瞻
 uint8_t* fullBuffer;
+int img_protect = 0;
+
+
+int zebra_change = 0;
+
 
 ////////////////////////////////////////////
 //功能：二值化
@@ -71,23 +68,32 @@ void THRE()
         }
     }
 }
-
 ////////////////////////////////////////////
 //功能：粗犷的清车头
 //输入：
-//输出：;
+//输出：
 //备注：要根据自己车头的大小进行修改
 ///////////////////////////////////////////
 void head_clear(void)
 {
     uint8_t* my_map;
-    for (int i = 119; i >= 84; i--)
+    int count = 0;
+    for (int i = 119; i >= 99; i--)
     {
         my_map = &IMG[i][0];
         for (int j = 40; j <= 135; j++)
         {
+            *(my_map + j) = white;
+        }
+    }
+    for (int i = 100; i >= 84; i--)
+    {
+        my_map = &IMG[i][0];
+        for (int j = 40 + count; j <= 135 - count; j++)
+        {
             *(my_map + j) = 255;
         }
+        count++;
     }
 }
 
@@ -216,7 +222,7 @@ void find_road()
     // 寻找最中心的白条子
     for (int i = 1; i <= white_range[istart].num; i++)
         if (white_range[istart].area[i].left <= CAMERA_W / 2
-            && white_range[istart].area[i].right >= CAMERA_W / 2 && (white_range[istart].area[i].right - white_range[istart].area[i].left) >= 90)
+            && white_range[istart].area[i].right >= CAMERA_W / 2 && (white_range[istart].area[i].right - white_range[istart].area[i].left) >= 10)
             road_f = find_f(white_range[istart].area[i].connect_num);
 
     if (road_f == -1)//若赛道没在中间，在113行选一行最长的认为这就是赛道
@@ -269,7 +275,14 @@ uint8_t find_continue(uint8_t i_start, uint8_t j_start)
     uint8_t width_new = 0;
     uint8_t left = 0;
     uint8_t right = 0;
+    uint8_t flag = 0;
+    uint8_t uwidth = 0;
+    uint8_t dwidth = 0;
+    uint8_t d3width = 0;
+    uint8_t u0width = 0;
     uint8_t dright, dleft, uright, uleft;
+    uint8_t a = 0, d3right;
+    uint8_t biggest = MISS;
     j_return = MISS;//如果没找到，输出255
     if (j_start > my_road[i_start].white_num)
         return MISS;
@@ -280,13 +293,17 @@ uint8_t find_continue(uint8_t i_start, uint8_t j_start)
         dright = my_road[i_start].connected[j_start].right;
         uleft = my_road[i_start - 1].connected[j].left;
         uright = my_road[i_start - 1].connected[j].right;
-        if (//相连
+        uwidth = my_road[i_start - 1].connected[j].width;
+        u0width = my_road[i_start - 1].connected[j + 1].width;
+        dwidth = my_road[i_start].connected[j_start].width;
+        ////////////////////////////////////////////////////////////////////////////////////////
+        if (//宮젯
             dleft < uright
             &&
             dright > uleft
             )
         {
-            //计算重叠大小
+            //셕炬路딸댕鬼
             if (dleft < uleft) left = uleft;
             else left = dleft;
 
@@ -321,7 +338,6 @@ void ordinary_two_line(void)
     uint8_t i_end;
     uint8_t j_start = MISS;
     int width_max;
-
     //寻找起始行最宽的白条子
     i_start = NEAR_LINE;
     i_end = FAR_LINE;
@@ -337,33 +353,31 @@ void ordinary_two_line(void)
     j_continue[i_start] = j_start;
 
     //记录连贯区域编号
-    for (i = i_start; i > i_end; i--)
+    for (i = i_start; i >= i_end; i--)
     {
         //如果相连编号大于该行白条数，非正常，从此之后都MISS
         if (j_continue[i] > my_road[i].white_num)
-        {
             j_continue[i - 1] = MISS;
-        }
         else
         {
             j_continue[i - 1] = find_continue(i, j_continue[i]);
         }
 
     }
-
     //全部初始化为MISS
     my_memset(left_line, MISS, CAMERA_H);
     my_memset(right_line, MISS, CAMERA_H);
-
-
-    for (i = i_start; i > i_end; i--)
+    for (i = i_start; i >= i_end; i--)
     {
         if (j_continue[i] <= my_road[i].white_num)
         {
             left_line[i] = my_road[i].connected[j_continue[i]].left;
             right_line[i] = my_road[i].connected[j_continue[i]].right;
-            IMG[i][left_line[i]] = purple;
-            IMG[i][right_line[i]] = gray;
+            //std::cout << unsigned(left_line[i]) << std::endl;
+            //std::cout << unsigned(my_road[i].connected[j_continue[i]].width) << std::endl;
+            //std::cout << unsigned(i) << std::endl;
+            //IMG[i][left_line[i]] = blue;
+            IMG[i][right_line[i]] = green;
         }
         else
         {
@@ -373,55 +387,386 @@ void ordinary_two_line(void)
     }
 }
 
-
-
-void scan_breakpoint()
+int32_t check_leftline(uint8_t a, uint8_t i, int32_t up_down, uint8_t diff)
 {
-    uint8_t i;
-    i = 100;
-    while (i > FAR_LINE)
+    int32_t point, point1;
+    uint8_t flag = 0;
+    uint8_t time = 0;
+    uint8_t step = a;
+    for (time; time < i; time++, step--)
     {
-        if (((left_line[i] - left_line[i - 3]) >= 3))
+        point = left_line[step] - left_line[step + up_down];
+        if (up_down < 0)
         {
-            left_line[i - 4] = left_line[i] + (left_line[i + 6] - left_line[i + 10]);
-            left_line[i - 3] = left_line[i + 1] + (left_line[i + 7] - left_line[i + 11]);
-            left_line[i - 2] = left_line[i + 2] + (left_line[i + 8] - left_line[i + 12]);
-            left_line[i - 1] = left_line[i + 3] + (left_line[i + 9] - left_line[i + 13]);
-            IMG[i][left_line[i]] = blue;
+            if (point <= 0 && point >= -3 && (unsigned(left_line[step]) != 0))
+            {
+                flag++;
+            }
         }
-        else if (((left_line[i - 3] - left_line[i]) >= 7))
+        else if (up_down > 0)
         {
-            left_line[i - 4] = left_line[i] - (left_line[i + 10] - left_line[i + 6]);
-            left_line[i - 3] = left_line[i + 1] - (left_line[i + 11] - left_line[i + 7]);
-            left_line[i - 2] = left_line[i + 2] - (left_line[i + 12] - left_line[i + 8]);
-            left_line[i - 1] = left_line[i + 3] - (left_line[i + 13] - left_line[i + 9]);
+            if (point <= 2 && point >= 0 && (unsigned(left_line[step]) != 0))
+            {
+                flag++;
+            }
         }
-        i--;
     }
-    i = 100;
-    while (i > FAR_LINE)
+    if (flag + diff >= i)
+        return 1;
+    else
+        return 0;
+}
+int check_rightline(uint8_t a, uint8_t i, int32_t up_down, uint8_t diff)
+{
+    int32_t point, point1;
+    uint8_t flag = 0;
+    uint8_t time = 0;
+    uint8_t step = a;
+    for (time; time < i; time++, step--)
     {
-        if (((right_line[i - 3] - right_line[i]) >= 3))
+        point = right_line[step + up_down] - right_line[step];
+        if (up_down < 0)
         {
-            right_line[i - 4] = right_line[i] - (right_line[i + 10] - right_line[i + 6]);
-            right_line[i - 3] = right_line[i + 1] - (right_line[i + 11] - right_line[i + 7]);
-            right_line[i - 2] = right_line[i + 2] - (right_line[i + 12] - right_line[i + 8]);
-            right_line[i - 1] = right_line[i + 3] - (right_line[i + 13] - right_line[i + 9]);
-            IMG[i][right_line[i]] = red;
+            if (point <= 3 && point >= -1 && (unsigned(right_line[step]) != 187) && (unsigned(right_line[step]) != 0)) {
+                flag++;
+            }
         }
-        if (((right_line[i] - right_line[i - 3]) >= 7))
+        else if (up_down > 0)
         {
-            right_line[i - 4] = right_line[i] + (right_line[i + 6] - right_line[i + 10]);
-            right_line[i - 3] = right_line[i + 1] + (right_line[i + 7] - right_line[i + 11]);
-            right_line[i - 2] = right_line[i + 2] + (right_line[i + 8] - right_line[i + 12]);
-            right_line[i - 1] = right_line[i + 3] + (right_line[i + 9] - right_line[i + 13]);
+            if (point <= 2 && point >= 0 && (unsigned(right_line[step]) != 255) && (unsigned(right_line[step]) != 187) && (unsigned(right_line[step]) != 0)) {
+                flag++;
+            }
         }
-        i--;
+    }
+    if (flag + diff >= i)
+        return 1;
+    else
+        return 0;
+}
+int check_midline(uint8_t a, uint8_t i, int32_t up_down)
+{
+    int32_t point, point1;
+    uint8_t flag = 0;
+    uint8_t time = 0;
+    uint8_t step = a;
+    for (time; time < i; time++, step--)
+    {
+        point = mid_line[step] - mid_line[step + up_down];
+        if (point < 1 && point > -1 && (unsigned(mid_line[step]) != 255) && (unsigned(mid_line[step]) != 187) && (unsigned(mid_line[step]) != 0))
+            flag++;
+    }
+    if (flag >= i)
+        return 1;//识别出为直道
+    else
+        return 0;
+}
+void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
+void get_mid_line(void);
+uint8_t scan_pic()
+{
+    uint8_t i, k, cheak = 0, l_cheak = 0, r_cheak = 0;
+    int32_t num = 0, num1 = 0, left_or_right = 0;
+    i = check_leftline(113, 100, -1, 3);
+    k = check_rightline(113, 100, -1, 3);
+    //std::cout << unsigned(i) << std::endl;
+    //std::cout << unsigned(k) << std::endl;
+    if (i == 1 && k == 1)
+    {
+        int test = 0;
+        int flag = 0;
+        int change = 0;
+        int count = 0;
+        for (int n = 25; n <= 100; n++)
+        {
+            change = 0;
+            test = 0;
+            flag = 0;
+            for (int m = 45; m <= 125; m++)
+            {
+                if (IMG[n][m] == 0)
+                    test = 0;
+                else
+                    test = 1;
+                if (test != flag)
+                {
+                    change++;//发生出现突变时，change加一，同时保存变化，以便下次出现变化可识别
+                    flag = test;
+                }
+            }
+            if (change >= 16)//共八条斑马线，进出各一次，共十六次，加上边界18次，允许部分误差
+                count++;
+        }
+        if (count > 1)
+            return 5;//返回斑马线
+        else
+            return 0;//返回直道
+    }
+    /*if (i == 1 && k == 1)
+    {
+        int flag = 0;
+        int test = 0;
+        int change = 0;
+        for (int m = 0; m <= 187; m++)
+        {
+            if (IMG[60][m] == 0)
+                test = 0;
+            else
+                test = 1;
+            if (test != flag)
+            {
+                change++;//发生出现突变时，change加一，同时保存变化，以便下次出现变化可识别
+                flag = test;
+            }
+        }
+        if (change >= 16)//共八条斑马线，进出各一次，共十六次，加上边界18次，允许部分误差
+            return 5;//返回斑马线
+        else
+            return 0;//返回直道
+    }*/
+    else
+    {
+        for (uint8_t a = 113; a > 1; a--) {
+            int32_t point = right_line[a] - left_line[a];
+            if (point > 175)
+                cheak++;//当左右边界差距过大时，cheak加一
+        }
+        if (cheak > 2)
+            return 1;//识别出十字
+        else {
+            uint8_t temp = 0;
+            for (uint8_t a = 113; a > 1; a--) {
+                int32_t point = left_line[a - 1] - left_line[a];
+                if (point < -3) {
+                    temp = a;
+                    break;
+                }
+            }
+            for (uint8_t a = temp; a > 1; a--) {
+                int32_t point = left_line[a - 1] - left_line[temp];
+                if (point < -10)
+                    l_cheak++;
+            }
+            temp = 0;
+            for (uint8_t a = 113; a > 1; a--) {
+                int32_t point = right_line[a - 1] - right_line[a];
+                if (point < -3) {
+                    temp = a;
+                    break;
+                }
+            }
+            for (uint8_t a = temp; a > 1; a--) {
+                int32_t point = right_line[a - 1] - right_line[temp];
+                if (point < -10)
+                    r_cheak++;
+            }
+            if (l_cheak > 4 && r_cheak > 4)
+                return 2;
+            else
+            {
+                get_mid_line();
+                for (uint8_t i = 100; i >= FAR_LINE; i--)
+                {
+                    num = mid_line[i] - mid_line[i - 1];
+                    num1 = mid_line[i - 1] - mid_line[i - 2];
+                    if (num == 1 && num1 == 1)
+                        left_or_right++;
+                    else if (num == -1 && num1 == -1)
+                        left_or_right--;
+                    else if (num > 10 || num < -10)
+                        break;
+                }
+                if (left_or_right > 0)
+                    return 3;
+                else if (left_or_right < 0)
+                    return 4;
+            }
+        }
+    }
+
+}
+void run_on_ten_withoout_bottom()
+{
+    uint8_t i, cheak = 0;
+    int32_t flag = 0;
+    for (uint8_t a = 1; a < 113; a++) {
+        int32_t point = right_line[a] - left_line[a];
+        if (point > 175)
+        {
+            cheak++;
+            flag = a;
+            break;
+        }
+    }
+    flag = flag - 6;
+    for (flag; flag > 1; flag--) {
+        i = check_midline(flag, 7, -1);
+        std::cout << unsigned(i) << std::endl;
+        if (i == 1)
+        {
+            std::cout << flag << std::endl;
+            uint8_t a = flag - 1;
+            for (a; a < 113; a++)
+            {
+                //std::cout << unsigned(a) << std::endl;
+                mid_line[a + 2] = mid_line[flag];
+            }
+            break;
+        }
+    }
+}
+void run_on_ten_with_bottom()
+{
+    uint8_t i, cheak = 0, l_cheak = 0, r_cheak = 0;
+    uint8_t left_gap, right_gap;
+    int32_t res_left_up = 0, res_left_down = 0;
+    int32_t res_right_up = 0, res_right_down = 0;
+    int32_t gap;
+    float slope;
+    for (uint8_t i = 113; i > 1; i--) {
+        if (check_leftline(i, 1, -1, 0) != 1) {
+            res_left_up = i;
+            break;
+        }
+    }
+    for (uint8_t i = 10; i < 113; i++) {
+        if (check_leftline(i, 1, +1, 0) != 1) {
+            res_left_down = i;
+            break;
+        }
+    }
+    for (uint8_t i = 113; i > 1; i--) {
+        if (check_rightline(i, 1, -1, 0) != 1) {
+            res_right_up = i;
+            break;
+        }
+    }
+    for (uint8_t i = 10; i < 113; i++) {
+        if (check_rightline(i, 1, +1, 0) != 1) {
+            res_right_down = i;
+            break;
+        }
+    }
+    //std::cout << unsigned(res_left_up) << std::endl;
+    //std::cout << unsigned(res_left_down) << std::endl;
+    //std::cout << unsigned(res_right_up) << std::endl;
+    //std::cout << unsigned(res_right_down) << std::endl;
+    left_gap = res_left_up - res_left_down;
+    right_gap = res_right_up - res_right_down;
+    gap = res_right_up - res_left_up;
+    l_cheak = check_leftline(113, 31, -1, 0);
+    //std::cout << unsigned(cheak) << std::endl;
+    //std::cout << unsigned(res_right_down) << std::endl;
+    //std::cout << gap << std::endl;
+    if (l_cheak == 1 && gap < 10 && gap > -10)
+        //gap <= 10 && gap >= -10 && res_left_up > 20 && res_left_down < 30)
+    {
+        //std::cout << res_left_down << std::endl;
+        //std::cout << res_left_up << std::endl;
+        for (i = 0; i <= left_gap + 4; i++)
+        {
+            slope = (float)(left_gap + 8) / (float)(left_line[res_left_down - 4] - left_line[res_left_up + 4]);
+            left_line[res_left_up + 2 - i] = (float)i / slope + left_line[res_left_up];
+            IMG[res_left_up + 2 - i][left_line[res_left_up + 2 - i]] = blue;
+
+        }
+        for (i = 0; i <= right_gap + 4; i++)
+        {
+            slope = (float)(right_gap + 8) / (float)(right_line[res_right_down - 4] - right_line[res_right_up + 4]);
+            right_line[res_right_up + 2 - i] = (float)i / slope + right_line[res_right_up];
+            IMG[res_right_up + 2 - i][right_line[res_right_up + 2 - i]] = green;
+        }
+    }
+}
+void run_left()
+{
+    int32_t num = 0, num1 = 0, num2 = 0, point = 0, gap = 0;
+    for (uint8_t i = 100; i >= 40; i--)
+    {
+        num = mid_line[i] - mid_line[i - 1];
+        num1 = mid_line[i - 1] - mid_line[i - 2];
+        num2 = mid_line[i - 2] - mid_line[i - 3];
+        if (num == 1 && num1 == 1)
+            point = i;
+        else if (num > 3 || num < -3)
+            break;
+    }
+    if (point != 0)
+    {
+        std::cout << point << std::endl;
+        gap = right_line[point] - mid_line[point];
+        for (uint8_t i = point; i >= FAR_LINE; i--)
+        {
+            if ((int32_t)right_line[i] - gap > 0)
+                mid_line[i] = right_line[i] - gap;
+            else
+                mid_line[i] = MISS;
+        }
+    }
+}
+void run_right()
+{
+    int32_t num = 0, num1 = 0, num2 = 0, point = 0, gap = 0;
+    for (uint8_t i = 100; i >= FAR_LINE; i--)
+    {
+        num = mid_line[i] - mid_line[i - 1];
+        num1 = mid_line[i - 1] - mid_line[i - 2];
+        num2 = mid_line[i - 2] - mid_line[i - 3];
+        if (num == -1 && num1 == -1)
+            point = i;
+        else if (num > 3 || num < -3)
+            break;
+
+    }
+    if (point != 0)
+    {
+        gap = left_line[point] - mid_line[point];
+        for (uint8_t i = point; i >= FAR_LINE; i--)
+        {
+            if ((int32_t)left_line[i] - gap > 0)
+                mid_line[i] = left_line[i] - gap;
+            else
+                mid_line[i] = MISS;
+        }
     }
 }
 
 
 
+int check_zebra(void)
+{
+    int test = 0;
+    int flag = 0;
+    int change = 0;
+    int count = 0;
+    for (int m = 40; m >= 25; m--)
+    {
+         change = 0;
+         test = 0;
+         flag = 0;
+                for (int n = 45; n <= 125; n++)
+                {
+                    if (IMG[m][n] == 0)
+                        test = 0;
+                    else
+                        test = 1;
+                    if (test != flag)
+                    {
+                        change++;//发生出现突变时，change加一，同时保存变化，以便下次出现变化可识别
+                        flag = test;
+                    }
+                }
+                if (change >= 14)//共八条斑马线，进出各一次，共十六次，加上边界18次，允许部分误差
+                {
+                    count++;
+                }
+    }
+    if (count>=3)
+    {
+        return 1;
+    }
+    else
+        return 0;
+}
 ////////////////////////////////////////////
 //功能：数组初始化
 //输入：uint8_t* ptr 数组首地址, uint8_t num初始化的值, uint8_t size数组大小
@@ -448,6 +793,7 @@ void get_mid_line(void)
 {
     my_memset(mid_line, MISS, CAMERA_H);
     for (int i = NEAR_LINE; i >= FAR_LINE; i--)
+    {
         if (left_line[i] != MISS)
         {
             mid_line[i] = (left_line[i] + right_line[i]) / 2;
@@ -456,101 +802,49 @@ void get_mid_line(void)
         {
             mid_line[i] = MISS;
         }
-//    int i = 112;
-//    while (i > FAR_LINE)
-//    {
-//        if (mid_line[i] == mid_line[i + 2])
-//            mid_line[i + 1] = mid_line[i];
-//        else if (mid_line[i] == mid_line[i + 2] + 1)
-//            mid_line[i + 1] = mid_line[i];
-//        else if (mid_line[i] == mid_line[i + 2] - 1)
-//            mid_line[i + 1] = mid_line[i];
-//        i--;
-//    }
-//    i = 112;
-//        while (i > FAR_LINE)
-//    {
-//        if (((mid_line[i]-mid_line[i-1])>2)|| ((mid_line[i-1] - mid_line[i]) > 2))
-//            mid_line[i - 1] = mid_line[i];
-//        else if (((mid_line[i] - mid_line[i - 2]) > 2) || ((mid_line[i - 2] - mid_line[i]) > 2))
-//            mid_line[i - 2] = mid_line[i];
-//        else if (((mid_line[i] - mid_line[i - 3]) > 2) || ((mid_line[i - 3] - mid_line[i]) > 2))
-//            mid_line[i - 3] = mid_line[i];
-//        i--;
-//    }
+    }
+    int i = 112;
+    while (i > FAR_LINE)
+    {
+        if (mid_line[i] == mid_line[i - 2])
+            mid_line[i - 1] = mid_line[i];
+        else if (mid_line[i] == mid_line[i - 2] + 1)
+            mid_line[i - 1] = mid_line[i];
+        else if (mid_line[i] == mid_line[i - 2] - 1)
+            mid_line[i - 1] = mid_line[i];
+        i--;
+    }
 }
 
-#define maxn 112
-#define rank_ 3
-void fix_line()
+void scan_mid_line(void)
 {
-    double x[113], y[113];
-    for (int i = 0; i < 113; i++)
+    int i, j, m, n;
+    int left[120];
+    int right[120];
+    for (i = 0; i < 119; i++)
     {
-        x[i] = i;
-        y[i] = mid_line[i];
+        left[i] = 90;
+        right[i] = 90;
     }
-    double atemp[2 * (rank_ + 1)] = { 0 }, b[rank_ + 1] = { 0 }, a[rank_ + 1][rank_ + 1];
-    int i, j, k;
-    for (i = 0; i < maxn; i++) {  //
-        atemp[1] += x[i];
-        atemp[2] += pow(x[i], 2);
-        atemp[3] += pow(x[i], 3);
-        atemp[4] += pow(x[i], 4);
-        atemp[5] += pow(x[i], 5);
-        atemp[6] += pow(x[i], 6);
-        b[0] += y[i];
-        b[1] += x[i] * y[i];
-        b[2] += pow(x[i], 2) * y[i];
-        b[3] += pow(x[i], 3) * y[i];
-    }
-
-    atemp[0] = maxn;
-
-    for (i = 0; i < rank_ + 1; i++) {  //构建线性方程组系数矩阵，b[]不变
-        k = i;
-        for (j = 0; j < rank_ + 1; j++)  a[i][j] = atemp[k++];
-    }
-
-    //以下为高斯列主元消去法解线性方程组
-    for (k = 0; k < rank_ + 1 - 1; k++) {  //n - 1列
-        int column = k;
-        double mainelement = a[k][k];
-
-        for (i = k; i < rank_ + 1; i++)  //找主元素
-            if (fabs(a[i][k]) > mainelement) {
-                mainelement = fabs(a[i][k]);
-                column = i;
-            }
-        for (j = k; j < rank_ + 1; j++) {  //交换两行
-            double atemp = a[k][j];
-            a[k][j] = a[column][j];
-            a[column][j] = atemp;
-        }
-        double btemp = b[k];
-        b[k] = b[column];
-        b[column] = btemp;
-
-        for (i = k + 1; i < rank_ + 1; i++) {  //消元过程
-            double Mik = a[i][k] / a[k][k];
-            for (j = k; j < rank_ + 1; j++)  a[i][j] -= Mik * a[k][j];
-            b[i] -= Mik * b[k];
-        }
-    }
-
-    b[rank_ + 1 - 1] /= a[rank_ + 1 - 1][rank_ + 1 - 1];  //回代过程
-    for (i = rank_ + 1 - 2; i >= 0; i--) {
-        double sum = 0;
-        for (j = i + 1; j < rank_ + 1; j++)  sum += a[i][j] * b[j];
-        b[i] = (b[i] - sum) / a[i][i];
-    }
-
-    for (int i = NEAR_LINE; i >= FAR_LINE; i--)
+    for (i = 15; i < 119; i++)
     {
-        if ((mid_line[i + 1] - mid_line[i]) >= 3 || (mid_line[i] - mid_line[i + 1]) >= 3)
+        for (m = 90; m > 0; m--)
         {
-            mid_line[i] = b[0] + b[1] * i + b[2] * i * i + b[3] * i * i * i;
+            if ((IMG[i][m] == 0) || (IMG[i][m] == MISS))
+            {
+                left[i] = m;
+                break;
+            }
         }
+        for (n = 91; n < 187; n++)
+        {
+            if ((IMG[i][n] == 0) || (IMG[i][n] == MISS))
+            {
+                right[i] = n;
+                break;
+            }
+        }
+        mid_line[i] = (left[i] + right[i])/2;
     }
 }
 
@@ -562,15 +856,60 @@ void fix_line()
 ///////////////////////////////////////////
 void image_main()
 {
+    uint8_t flag;
+    int coun = 0;
     THRE();
+    for(int i = 89; i<119;i++)
+    {
+        for (int j=0;j<187;j++)
+        {
+            if (IMG[i][j]==0)
+            {
+                coun++;
+            }
+        }
+    }
+    if (coun>5000)
+        img_protect = 1;
+    if(coun <5000)
+        img_protect = 0;
     head_clear();
+    zebra_change=check_zebra();
     search_white_range();
     find_all_connect();
     find_road();
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
     ordinary_two_line();
-    //scan_breakpoint();
-    get_mid_line();
+    flag = scan_pic();
+    if (flag == 0) {
+        //std::cout << unsigned(flag) << std::endl;
+        get_mid_line();
+    }
+    else if (flag == 1) {
+        get_mid_line();
+        run_on_ten_withoout_bottom();
+    }
+    else if (flag == 2) {
+        run_on_ten_with_bottom();
+        get_mid_line();
+        //std::cout << unsigned(flag) << std::endl;
+    }
+    else if (flag == 3) {
+        get_mid_line();
+        run_left();
+        //std::cout << unsigned(flag) << std::endl;
+    }
+    else if (flag == 4)
+    {
+        //std::cout << unsigned(flag) << std::endl;
+        get_mid_line();
+        run_right();
+    }
+    else if (flag == 5)
+    {
+        scan_mid_line();
+    }
+    //scan_breakpoint2();
     for (int i = NEAR_LINE; i >= FAR_LINE; i--)
         if (mid_line[i] != MISS)
             IMG[i][mid_line[i]] = 0;
