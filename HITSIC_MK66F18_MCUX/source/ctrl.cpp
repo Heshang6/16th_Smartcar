@@ -12,31 +12,49 @@ void CTRL_Init(void)
 {
     pitMgr_t::insert(5U, 2U, CTRL_MOTOR, pitMgr_t::enable);
     pitMgr_t::insert(20U, 3U, CTRL_SERVO, pitMgr_t::enable);
-    pitMgr_t::insert(20U, 4U, EM_GetError, pitMgr_t::enable);
+   // pitMgr_t::insert(20U, 4U, EM_GetError, pitMgr_t::enable);
 }
 
 extern float em_error;
 extern float AD[8];
 
-float error = 0;
+float errorl_0 = 0;
+float errorl_1 = 0;
+float errorr_0 = 0;
+float errorr_1 = 0;//电机左右轮两次误差
+float error_0 = 0.0f;//舵机误差
+float error_1 = 0.0f;
 float servo_pwm = 0.0f;
+float motor_spdL = 0.0f;//左右轮实际速度
+float motor_spdR = 0.0f;
+float motor_pwmL = 0.0f;//左右轮输出
+float motor_pwmR = 0.0f;
+float motor_spdsetL = 0.0f;//左右轮期望速度
+float motor_spdsetR = 0.0f;
 
-float EM_RUN = 1;
-float IMAGE_RUN = 0;
-float servo_mid = 7.3f;
-float motor_pwm = 20.0f;
+int zebra_stop = 0;
+int start_switch = 0;
+int imgmid = 89;
+float K = 1;
+float motor_spdset = 2; //实际期望速度
+float EM_RUN = 0;
+float IMAGE_RUN = 1;
+float servo_mid = 7.82f;
+float motorL_kp = 0.03f;
+float motorL_ki = 0.03f;
+float motorR_kp = 0.03f;
+float motorR_ki = 0.03f;
+float motor_spdsetW = 0.0f;
+
+float runtime = 0;
 /** 舵机PID结构体 */
 pidCtrl_t SERVO_PID =
 {
     .kp = 0.033f, .ki = 0.0f, .kd = 0.044f,
     .errCurr = 0.0f, .errIntg = 0.0f, .errDiff = 0.0f, .errPrev = 0.0f,
 };
-/** 电机PID结构体 */
-pidCtrl_t MOTOR_PID =
-{
-    .kp = 0.30f, .ki = 0.20f, .kd = 0.0f,
-    .errCurr = 0.0f, .errIntg = 0.0f, .errDiff = 0.0f, .errPrev = 0.0f,
-};
+
+
 
 ////////////////////////////////////////////
 //功能：舵机控制
@@ -48,25 +66,28 @@ void CTRL_SERVO()
 {
     if((IMAGE_RUN == 1)&&(EM_RUN == 0))
     {
-        error = 94 - int(mid_line[prospect]);
-        servo_pwm = servo_mid + PIDCTRL_UpdateAndCalcPID(&SERVO_PID, error);
+        error_1 = imgmid - int(mid_line[prospect]);
+
+        if(error_1 == -166)
+            error_1 = error_0;
+        servo_pwm = servo_mid + SERVO_PID.kp*error_1 + SERVO_PID.kd*(error_1-error_0);
         if(servo_pwm<6.8)
             servo_pwm=6.8;
-        else if(servo_pwm>8.3)
-            servo_pwm=8.3;
+        else if(servo_pwm>8.55)
+            servo_pwm=8.55;
         SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,servo_pwm);
+        error_0 = error_1;
     }
     if((IMAGE_RUN == 0)&&(EM_RUN == 1))
     {
-        error = em_error;
-        servo_pwm = servo_mid + PIDCTRL_UpdateAndCalcPID(&SERVO_PID, error);
+        error_1 = em_error;
+        servo_pwm = servo_mid + PIDCTRL_UpdateAndCalcPID(&SERVO_PID, error_1);
         if(servo_pwm<6.8)
             servo_pwm=6.8;
-        else if(servo_pwm>8.3)
-            servo_pwm=8.3;
+        else if(servo_pwm>8.55)
+            servo_pwm=8.55;
         SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,servo_pwm);
     }
-
 }
 
 ////////////////////////////////////////////
@@ -77,10 +98,78 @@ void CTRL_SERVO()
 ///////////////////////////////////////////
 void CTRL_MOTOR()
 {
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,motor_pwm);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,motor_pwm);
-}
+     if(start_switch == 0)
+     {
+         runtime+=0.005;
+              motor_spdR = -SCFTM_GetSpeed(FTM1)*0.034778;
+              SCFTM_ClearSpeed(FTM1);
+              motor_spdL = SCFTM_GetSpeed(FTM2)*0.034778;
+              SCFTM_ClearSpeed(FTM2);
 
+              if(servo_pwm > servo_mid + 0.2)//左转
+              {
+                  motor_spdsetR = motor_spdsetW;
+                  motor_spdsetL = motor_spdsetW*K*(-0.2931*servo_pwm*servo_pwm*servo_pwm+7.0538*servo_pwm*servo_pwm-57.05*servo_pwm+155.94);
+              }
+              if(servo_pwm < servo_mid - 0.2)//右转
+              {
+                  motor_spdsetL = motor_spdsetW;
+                  motor_spdsetR = motor_spdsetW*K/(-0.2931*servo_pwm*servo_pwm*servo_pwm+7.0538*servo_pwm*servo_pwm-57.05*servo_pwm+155.94);
+              }
+              if((servo_pwm <= servo_mid + 0.2)&&(servo_pwm >= servo_mid - 0.2))
+              {
+                  motor_spdsetL = motor_spdset;
+                  motor_spdsetR = motor_spdset;
+              }
+              if(((zebra_stop == 1)&&(runtime > 10))||(img_protect == 1))
+              {
+                  motor_spdsetL = 0;
+                  motor_spdsetR = 0;
+              }
+              errorl_1 = motor_spdsetL-motor_spdL;
+              errorr_1 = motor_spdsetR-motor_spdR;
+              motor_pwmL += motorL_kp *(errorl_1 - errorl_0) + motorL_ki*(errorl_1);
+              motor_pwmR += motorR_kp *(errorr_1 - errorr_0) + motorR_ki*(errorr_1);
+              errorl_0 = errorl_1;
+              errorr_0 = errorr_1;
+              if(motor_pwmL > 99)
+                  motor_pwmL = 99;
+              if(motor_pwmL < -99)
+                  motor_pwmL = -99;
+              if(motor_pwmR > 99)
+                  motor_pwmR = 99;
+              if(motor_pwmR < -99)
+                  motor_pwmR = -99;
+//              if(img_protect == 1)
+//              {
+//                  SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,0);
+//                  SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
+//                  SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
+//                  SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,0);
+//              }
+//              else
+//              {
+                     if(motor_pwmL>0)
+                     {
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,motor_pwmL);
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
+                     }
+                     else
+                     {
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,0);
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,-motor_pwmL);
+                     }
+                     if(motor_pwmR>0)
+                     {
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,motor_pwmR);
+                     }
+                     else
+                     {
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,-motor_pwmR);
+                         SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,0);
+                     }
+              //}
+     }
+}
 

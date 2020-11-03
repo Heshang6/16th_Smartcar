@@ -84,6 +84,7 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 
 /** SCLIB_TEST */
 #include "sc_test.hpp"
+#include "sc_host.h"
 
 /**Team_FUC*/
 #include "image.hpp"
@@ -97,6 +98,9 @@ dmadvp_config_t dmadvpCfg;
 
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
 void Boma(void);
+
+void A();
+void B();
 
 void RUN_IMAGE(menu_keyOp_t* op);
 void RUN_EM(menu_keyOp_t* op);
@@ -170,16 +174,38 @@ void main(void)
     MENU_Resume();
     /** 控制环初始化 */
     //TODO: 在这里初始化控制环
+   pitMgr_t::insert(5U, 2U, A, pitMgr_t::enable);
     CTRL_Init();
+
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
     /** 内置DSP函数测试 */
     float f = arm_sin_f32(0.6f);
+
     while (true)
     {
+         if((zebra_change == 1)&&(runtime > 10 ))
+         {
+             SDK_DelayAtLeastUs(30000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+             zebra_stop = 1;
+         }
+//        motor_spdset = 2.5;
+//        SDK_DelayAtLeastUs(1000000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+//        motor_spdset = 1;
+//        SDK_DelayAtLeastUs(600000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+//        motor_spdset = 3;
+//        SDK_DelayAtLeastUs(1000000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+//        motor_spdset = -1;
+//        SDK_DelayAtLeastUs(800000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+//        motor_spdset = 2.5;
+//        SDK_DelayAtLeastUs(1000000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
+//        motor_spdset = 0;
+//        SDK_DelayAtLeastUs(500000, CLOCK_GetFreq(kCLOCK_CoreSysClk));
         Boma();
+//        float WIFI_data[4]={(float)motor_spdset,(float)motor_spdL,(float)motor_spdR,(float)zebra_change};
+//        SCHOST_VarUpload(WIFI_data,4);
         //TODO: 在这里添加车模保护代码
-    };
+    }
 }
 
 void MENU_DataSetUp(void)
@@ -194,8 +220,7 @@ void MENU_DataSetUp(void)
 //    RUN = MENU_ListConstruct("RUN", 20, menu_menuRoot);
 //    assert(RUN);
 //    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, RUN, "RUN", 0, 0));
-//    MENU_ListInsert(RUN, MENU_ItemConstruct(procType, RUN_IMAGE, "runi", 0, 0));
-//    MENU_ListInsert(RUN, MENU_ItemConstruct(procType, RUN_EM, "rune", 0, 0));
+
 
     SERVO = MENU_ListConstruct("data_SERVO", 20, menu_menuRoot);
     assert(SERVO);
@@ -208,23 +233,29 @@ void MENU_DataSetUp(void)
     MOTOR = MENU_ListConstruct("data_MOTOR", 20, menu_menuRoot);
     assert(MOTOR);
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, MOTOR, "MOTOR", 0, 0));
-    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motor_pwm, "motor_pwm", 14, menuItem_data_global));
-    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.kp, "motor_P", 15, menuItem_data_global));
-    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.ki, "motor_I", 16, menuItem_data_global));
-    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.kd, "motor_D", 17, menuItem_data_global));
-
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motor_spdset, "motor_spdset", 14, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motor_spdsetW, "motor_spdsetW", 23, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motorL_kp, "motorL_P", 15, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motorL_ki, "motorL_I", 16, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motorR_kp, "motorR_P", 21, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motorR_ki, "motorR_I", 22, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &K, "K", 17, menuItem_data_global));
     IMAGE = MENU_ListConstruct("data_IMAGE", 20, menu_menuRoot);
     assert(IMAGE);
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, IMAGE, "IMAGE", 0, 0));
     MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &prospect, "prospect", 18, menuItem_data_global));
     MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &threshold, "threshold", 19, menuItem_data_global));
+    MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &imgmid, "imgmid", 20, menuItem_data_global));
 
     EM = MENU_ListConstruct("data_EM", 20, menu_menuRoot);
     assert(EM);
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, EM, "EM", 0, 0));
-    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &error, "error", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
-    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &AD[0], "AD[0]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
-    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &AD[6], "AD[6]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &error_1, "error_1", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &motor_spdL, "motor_spdL", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &motor_spdR, "motor_spdR", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    //MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &flag1, "flag1", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &img_protect, "img_protect", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &zebra_change, "zebra_change", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
     //TODO: 在这里添加子菜单和菜单项
 }
 
@@ -294,6 +325,18 @@ void RUN_EM(menu_keyOp_t*  op)
     IMAGE_RUN = 0;
     EM_RUN = 1;
 }
+
+void A()
+{
+    float a[9] = {motor_spdset ,motor_spdL ,motor_spdR,motor_spdsetL,motor_spdsetR,motor_pwmL,motor_pwmR,servo_pwm,(float)zebra_change};
+    SCHOST_VarUpload(a,9);
+}
+void B()
+{
+    motor_spdset = 1;
+}
+
+
 /**
  * 『灯千结的碎碎念』 Tips by C.M. :
  * 1. 浮点数计算有时（例如除零时）会产生“nan”，即“非数（Not-a-Number）”。

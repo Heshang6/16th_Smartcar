@@ -90,4 +90,3 @@ void EM_GetError(void)
     LV_Get_Val();
     em_error = (AD[6]-AD[0])/(AD[6]+AD[0]);
 }
-
