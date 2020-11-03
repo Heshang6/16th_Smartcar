@@ -21,8 +21,8 @@ extern float AD[8];
 float error = 0;
 float servo_pwm = 0.0f;
 
-float EM_RUN = 1;
-float IMAGE_RUN = 0;
+float EM_RUN = 0;
+float IMAGE_RUN = 1;
 float servo_mid = 7.3f;
 float motor_pwm = 20.0f;
 /** 舵机PID结构体 */
@@ -66,7 +66,6 @@ void CTRL_SERVO()
             servo_pwm=8.3;
         SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,servo_pwm);
     }
-
 }
 
 ////////////////////////////////////////////
@@ -77,10 +76,20 @@ void CTRL_SERVO()
 ///////////////////////////////////////////
 void CTRL_MOTOR()
 {
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,motor_pwm);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,motor_pwm);
+//    if((img_protect == 0)&&(zebra_change != 2));
+    if(img_protect == 0)
+    {
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,motor_pwm);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,motor_pwm);
+    }
+    if(img_protect == 1)
+    {
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,0);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
+        SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,0);
+    }
 }
-
 

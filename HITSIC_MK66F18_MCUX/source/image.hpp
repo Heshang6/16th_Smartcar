@@ -1,13 +1,5 @@
-/*
- * image.hpp
- *
- *  Created on: 2020年11月14日
- *      Author: 刘馨元
- */
-
-#ifndef IMAGE_HPP_
-#define IMAGE_HPP_
-
+#ifndef _IMAGE_H
+#define _IMAGE_H
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -36,9 +28,13 @@
 extern uint8_t IMG[CAMERA_H][CAMERA_W];//二值化后图像数组
 extern uint8_t image_Buffer_0[CAMERA_H][CAMERA_W];
 extern uint8_t* fullBuffer;//指向灰度图的首地址
+extern int zebra_change;
 extern uint32_t threshold; //阈值
 extern uint32_t prospect; //前瞻
 extern uint8_t mid_line[CAMERA_H]; //中线
+extern int img_protect; //baohu
+extern int change1;//
+
 
 void head_clear(void);
 void THRE(void);
@@ -50,8 +46,13 @@ uint8_t find_continue(uint8_t i_start, uint8_t j_start);
 void ordinary_two_line(void);
 void image_main();
 void get_mid_line(void);
+void scan_breakpoint2(void);
+int32_t check_leftline(uint8_t a, uint8_t i, int32_t up_down);
+int check_rightline(uint8_t a, uint8_t i, int32_t up_down);
+int get_bend(void);
+void scan_bend(void);
+void clean_zebra(void);
+void scan_mid_line(void);
 
 void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
-
-
-#endif /* IMAGE_HPP_ */
+#endif //

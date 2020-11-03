@@ -223,6 +223,9 @@ void MENU_DataSetUp(void)
     assert(EM);
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, EM, "EM", 0, 0));
     MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &error, "error", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &img_protect, "img_protect", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &zebra_change, "zebra_change", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &change1, "change1", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
     MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &AD[0], "AD[0]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
     MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &AD[6], "AD[6]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
     //TODO: 在这里添加子菜单和菜单项
