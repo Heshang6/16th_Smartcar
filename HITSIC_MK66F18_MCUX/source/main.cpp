@@ -85,34 +85,21 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 /** SCLIB_TEST */
 #include "sc_test.hpp"
 
-/** SMART TEAM14TH */
+/**Team_FUC*/
 #include "image.hpp"
-
-
-static float servo_P = 0.0359, servo_D = 0.0026;//这里修改舵机PD
-static float pwm_motor =20, pwm_servo = 0; //这里修改电机转速
-static float servo_mid = 7.31;  //舵机中值
-static uint32_t qianzhan = 55; // 前瞻
-
-extern uint32_t threshold;//阈值
-extern uint8_t mid_line[CAMERA_H];//中线
-extern uint8_t IMG[CAMERA_H][CAMERA_W];//二值化后图像数组
-
-int error_1 = 0; //当前误差
-int error_0 = 0; //上次误差
-
-void SERVO_PD(void);  //舵机PD控制
-void MOTOR_PWM(void); //电机输入
-void run(menu_keyOp_t *run);
+#include "ctrl.hpp"
+#include "em.hpp"
 
 void MENU_DataSetUp(void);
 
-
-
 cam_zf9v034_configPacket_t cameraCfg;
 dmadvp_config_t dmadvpCfg;
-dmadvp_handle_t dmadvpHandle;
+
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
+void Boma(void);
+
+void RUN_IMAGE(menu_keyOp_t* op);
+void RUN_EM(menu_keyOp_t* op);
 
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
@@ -144,7 +131,7 @@ void main(void)
     /** 初始化OLED屏幕 */
     DISP_SSD1306_Init();
     extern const uint8_t DISP_image_100thAnniversary[8][128];
-    DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
+    //DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
     /** 初始化ftfx_Flash */
     FLASH_SimpleInit();
     /** 初始化PIT中断管理器 */
@@ -157,189 +144,162 @@ void main(void)
     MENU_Data_NvmRead(menu_currRegionNum);
     /** 菜单挂起 */
     MENU_Suspend();
-
     /** 初始化摄像头 */
-//    cam_zf9v034_configPacket_t cameraCfg;
-//      CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
-//      CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
-//      dmadvp_config_t dmadvpCfg;
-//      CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
-//      DMADVP_Init(DMADVP0, &dmadvpCfg);
-//      dmadvp_handle_t dmadvpHandle;
-//      DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-//      uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-//      uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
-//      //uint8_t *fullBuffer = NULL;
-//      disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-//      DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-//      DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-//      DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
-//    //TODO: 在这里初始化摄像头
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+
+    dmadvp_handle_t dmadvpHandle;
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_DmaCallback);
+    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+  //  uint8_t *imageBuffer2 = new uint8_t[DMADVP0->imgSize];
+
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+   // DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer2);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //TODO: 在这里初始化摄像头
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
     MENU_Resume();
     /** 控制环初始化 */
     //TODO: 在这里初始化控制环
-    pitMgr_t::insert(6U, 4, MOTOR_PWM, pitMgr_t::enable);//电机中断
-    pitMgr_t::insert(20U, 5, SERVO_PD, pitMgr_t::enable);//舵机中断
+    CTRL_Init();
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
-
     /** 内置DSP函数测试 */
     float f = arm_sin_f32(0.6f);
-
-//    while (true)
-//    {
-//        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
-//        image_main();
-//                dispBuffer->Clear();
-//                const uint8_t imageTH = threshold;
-//                for (int i = 0; i < cameraCfg.imageRow; i += 2)
-//                {
-//                    int16_t imageRow = i >> 1;//除以2 为了加速;
-//                    int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-//                    for (int j = 0; j < cameraCfg.imageCol; j += 2)
-//                    {
-//                        int16_t dispCol = j >> 1;
-//                        if (IMG[i][j]>imageTH)
-//                        {
-//                            dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-//                        }
-//                    }
-//                }
-//                DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
-//
-//        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
-//        //TODO: 在这里添加车模保护代码
-//    }
+    while (true)
+    {
+        Boma();
+        //TODO: 在这里添加车模保护代码
+    };
 }
 
 void MENU_DataSetUp(void)
 {
-    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "EXAMPLE", 0, 0));
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "CAR TEAM16", 0, 0));
     static menu_list_t *SERVO;
-         static menu_list_t *MOTOR;
-         static menu_list_t *IMAGE;
-         static menu_list_t *RUN;
+    static menu_list_t *MOTOR;
+    static menu_list_t *IMAGE;
+    static menu_list_t *EM;
+    static menu_list_t *RUN;
 
-         RUN = MENU_ListConstruct("RUN", 20, menu_menuRoot);
-         assert(RUN);
-         MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, RUN, "RUN", 0, 0));
-         MENU_ListInsert(RUN, MENU_ItemConstruct(procType, run, "run", 0, menuItem_proc_uiDisplay|menuItem_proc_runOnce));
+//    RUN = MENU_ListConstruct("RUN", 20, menu_menuRoot);
+//    assert(RUN);
+//    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, RUN, "RUN", 0, 0));
+//    MENU_ListInsert(RUN, MENU_ItemConstruct(procType, RUN_IMAGE, "runi", 0, 0));
+//    MENU_ListInsert(RUN, MENU_ItemConstruct(procType, RUN_EM, "rune", 0, 0));
 
-         SERVO = MENU_ListConstruct("data_SERVO", 20, menu_menuRoot);
-         assert(SERVO);
-         MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, SERVO, "SERVO", 0, 0));
-         MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &servo_P, "servo_P", 10, menuItem_data_global));
-         MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &servo_D, "servo_D", 11, menuItem_data_global));
-         MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &servo_mid, "servo_mid", 12, menuItem_data_global));
+    SERVO = MENU_ListConstruct("data_SERVO", 20, menu_menuRoot);
+    assert(SERVO);
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, SERVO, "SERVO", 0, 0));
+    MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &SERVO_PID.kp, "servo_P", 10, menuItem_data_global));
+    MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &SERVO_PID.ki, "servo_I", 11, menuItem_data_global));
+    MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &SERVO_PID.kd, "servo_D", 12, menuItem_data_global));
+    MENU_ListInsert(SERVO, MENU_ItemConstruct(varfType, &servo_mid, "servo_mid", 13, menuItem_data_global));
 
-         MOTOR = MENU_ListConstruct("data_MOTOR", 20, menu_menuRoot);
-         assert(MOTOR);
-         MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, MOTOR, "MOTOR", 0, 0));
-         MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &pwm_motor, "pwm_motor", 13, menuItem_data_global));
+    MOTOR = MENU_ListConstruct("data_MOTOR", 20, menu_menuRoot);
+    assert(MOTOR);
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, MOTOR, "MOTOR", 0, 0));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &motor_pwm, "motor_pwm", 14, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.kp, "motor_P", 15, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.ki, "motor_I", 16, menuItem_data_global));
+    MENU_ListInsert(MOTOR, MENU_ItemConstruct(varfType, &MOTOR_PID.kd, "motor_D", 17, menuItem_data_global));
 
+    IMAGE = MENU_ListConstruct("data_IMAGE", 20, menu_menuRoot);
+    assert(IMAGE);
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, IMAGE, "IMAGE", 0, 0));
+    MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &prospect, "prospect", 18, menuItem_data_global));
+    MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &threshold, "threshold", 19, menuItem_data_global));
 
-         IMAGE = MENU_ListConstruct("data_IMAGE", 20, menu_menuRoot);
-         assert(IMAGE);
-         MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, IMAGE, "IMAGE", 0, 0));
-         MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &qianzhan, "qianzhan", 14, menuItem_data_global));
-         MENU_ListInsert(IMAGE, MENU_ItemConstruct(variType, &threshold, "threshold", 15, menuItem_data_global));
-
-
+    EM = MENU_ListConstruct("data_EM", 20, menu_menuRoot);
+    assert(EM);
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(menuType, EM, "EM", 0, 0));
+    MENU_ListInsert(EM, MENU_ItemConstruct(varfType, &error, "error", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[0], "AD[0]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[6], "AD[6]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[1], "AD[1]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[2], "AD[2]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[3], "AD[3]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[4], "AD[4]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[5], "AD[5]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
+    MENU_ListInsert(EM, MENU_ItemConstruct(variType, &AD[7], "AD[7]", 0U,menuItem_data_NoSave | menuItem_data_NoLoad|menuItem_data_ROFlag));
     //TODO: 在这里添加子菜单和菜单项
 }
 
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
 {
     //TODO: 补完本回调函数，双缓存采图。
-
-    //TODO: 添加图像处理（转向控制也可以写在这里）
-}
-void SERVO_PD()
-{
-     float servo_error=0;
-     error_1=94-mid_line[qianzhan];
-     servo_error=servo_P*error_1+servo_D*(error_1-error_0);
-     pwm_servo=servo_mid+servo_error;
-//     if(pwm_servo<servo_mid-0.)
-//         pwm_servo=servo_mid-0.6;
-//     else if(pwm_servo>servo_mid+0.6)
-//         pwm_servo=servo_mid+0.6;
-     if(pwm_servo<6.8)
-         pwm_servo=6.8;
-     else if(pwm_servo>8.3)
-         pwm_servo=8.3;
-
-     error_0=error_1;
-     SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,pwm_servo);
-}
-void MOTOR_PWM()
-{
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,pwm_motor);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_1,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_2,20000U,0);
-    SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_3,20000U,pwm_motor);
-}
-void run(menu_keyOp_t *run)
-{
-    MENU_Suspend();
-    /** 初始化摄像头 */
-    cam_zf9v034_configPacket_t cameraCfg;
-    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);    //设置摄像头配置
-    CAM_ZF9V034_CfgWrite(&cameraCfg);    //写入配置
-    dmadvp_config_t dmadvpCfg;
-    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
-    DMADVP_Init(DMADVP0, &dmadvpCfg);
-    dmadvp_handle_t dmadvpHandle;
-    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
-    //uint8_t *fullBuffer = NULL;//
-    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
-
-    while (true)
+    dmadvp_handle_t *dmadvpHandle = (dmadvp_handle_t*) userData;
+    status_t result = 0;
+    DMADVP_EdmaCallbackService(dmadvpHandle, transferDone);
+    result = DMADVP_TransferStart(dmadvpHandle->base, dmadvpHandle);
+    //PRINTF("new full buffer: 0x%-8.8x = 0x%-8.8x\n", handle->fullBuffer.front(), handle->xferCfg.destAddr);
+    if (kStatus_Success != result)
     {
-        //TODO: 在这里添加车模保护代码
-        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
+        DMADVP_TransferStop(dmadvpHandle->base, dmadvpHandle);
+        PRINTF("transfer stop! insufficent buffer\n");
+    }
+    if (transferDone == true)
+    {
+        DMADVP_TransferGetFullBuffer(DMADVP0, dmadvpHandle, &fullBuffer);
         image_main();
-        dispBuffer->Clear();
-        //const uint8_t imageTH = 200;    //图片实际阈值，应可调
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, dmadvpHandle, fullBuffer);
+    }
+}
+
+void Boma(void)
+{
+    bool menu_suspend = false;
+    while (GPIO_PinRead(GPIOA, 9) == 1)    //检测PTA9为低电平
+    {
+        if (menu_suspend == false)
+        {
+            MENU_Suspend();
+            menu_suspend = 1;
+
+        }
+        dispBuffer.Clear();
+        const uint8_t imageTH = threshold;
         for (int i = 0; i < cameraCfg.imageRow; i += 2)
         {
-            int16_t imageRow = i >> 1;//除以2 为了加速;
+            int16_t imageRow = i >> 1;    //除以2,为了加速;
             int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
             for (int j = 0; j < cameraCfg.imageCol; j += 2)
             {
                 int16_t dispCol = j >> 1;
-                if (IMG[i][j]>threshold)  //fullBuffer[i * cameraCfg.imageCol + j] > imageTH
+                if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH && j != mid_line[i] && j != 94)
                 {
-                dispBuffer->SetPixelColor(dispCol, imageRow, 1);
+                    dispBuffer.SetPixelColor(dispCol, imageRow, 1);
                 }
             }
         }
-        DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
-        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+        DISP_SSD1306_BufferUpload((uint8_t*) &dispBuffer);
     }
-    MENU_Resume();
+    if (menu_suspend == true)
+    {
+        MENU_Resume();
+        menu_suspend = false;
+    }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+void RUN_IMAGE(menu_keyOp_t*  op)
+{
+    IMAGE_RUN = 1;
+    EM_RUN = 0;
+}
+void RUN_EM(menu_keyOp_t*  op)
+{
+    IMAGE_RUN = 0;
+    EM_RUN = 1;
+}
 /**
  * 『灯千结的碎碎念』 Tips by C.M. :
  * 1. 浮点数计算有时（例如除零时）会产生“nan”，即“非数（Not-a-Number）”。
@@ -356,5 +316,3 @@ void run(menu_keyOp_t *run)
  *      中是十分危险的，可能造成车模进入“原地陀螺旋转”的状态，极易损坏车模或
  *      导致人员受伤。在设置电机占空比时务必做好异常保护。
  */
-
-

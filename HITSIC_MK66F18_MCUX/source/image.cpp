@@ -43,7 +43,8 @@ uint8_t left_line[CAMERA_H], right_line[CAMERA_H];//赛道的左右边界
 uint8_t mid_line[CAMERA_H];
 int all_connect_num = 0;//所有白条子数
 uint8_t top_road;//赛道最高处所在行数
-uint32_t threshold = 160;//阈值
+uint32_t threshold = 160; //阈值
+uint32_t prospect = 45; //前瞻
 uint8_t* fullBuffer;
 
 ////////////////////////////////////////////
@@ -74,7 +75,7 @@ void THRE()
 ////////////////////////////////////////////
 //功能：粗犷的清车头
 //输入：
-//输出：
+//输出：;
 //备注：要根据自己车头的大小进行修改
 ///////////////////////////////////////////
 void head_clear(void)
@@ -455,17 +456,17 @@ void get_mid_line(void)
         {
             mid_line[i] = MISS;
         }
-    int i = 112;
-    while (i > FAR_LINE)
-    {
-        if (mid_line[i] == mid_line[i + 2])
-            mid_line[i + 1] = mid_line[i];
-        else if (mid_line[i] == mid_line[i + 2] + 1)
-            mid_line[i + 1] = mid_line[i];
-        else if (mid_line[i] == mid_line[i + 2] - 1)
-            mid_line[i + 1] = mid_line[i];
-        i--;
-    }
+//    int i = 112;
+//    while (i > FAR_LINE)
+//    {
+//        if (mid_line[i] == mid_line[i + 2])
+//            mid_line[i + 1] = mid_line[i];
+//        else if (mid_line[i] == mid_line[i + 2] + 1)
+//            mid_line[i + 1] = mid_line[i];
+//        else if (mid_line[i] == mid_line[i + 2] - 1)
+//            mid_line[i + 1] = mid_line[i];
+//        i--;
+//    }
 //    i = 112;
 //        while (i > FAR_LINE)
 //    {
@@ -568,9 +569,8 @@ void image_main()
     find_road();
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
     ordinary_two_line();
-    scan_breakpoint();
+    //scan_breakpoint();
     get_mid_line();
-    //fix_line();
     for (int i = NEAR_LINE; i >= FAR_LINE; i--)
         if (mid_line[i] != MISS)
             IMG[i][mid_line[i]] = 0;
