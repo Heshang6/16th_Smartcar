@@ -13,7 +13,7 @@
 #define LEFT_SIDE 0//图像处理左边界
 #define RIGHT_SIDE 187//图像处理右边界
 #define MISS 255
-#define white_num_MAX 10//每行最多允许白条数
+#define white_num_MAX 15//每行最多允许白条数
 
 /////////////////////////////
 #define black 0

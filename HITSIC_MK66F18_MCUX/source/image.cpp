@@ -772,6 +772,41 @@ void clean_zebra(void)
 }
 
 
+int check_zebra(void)
+{
+    int test = 0;
+    int flag = 0;
+    int change = 0;
+    int count = 0;
+    for (int m = 40; m >= 25; m--)
+    {
+         change = 0;
+         test = 0;
+         flag = 0;
+                for (int n = 45; n <= 125; n++)
+                {
+                    if (IMG[m][n] == 0)
+                        test = 0;
+                    else
+                        test = 1;
+                    if (test != flag)
+                    {
+                        change++;//发生出现突变时，change加一，同时保存变化，以便下次出现变化可识别
+                        flag = test;
+                    }
+                }
+                if (change >= 14)//共八条斑马线，进出各一次，共十六次，加上边界18次，允许部分误差
+                {
+                    count++;
+                }
+    }
+    if (count>=3)
+    {
+        return 1;
+    }
+    else
+        return 0;
+}
 ////////////////////////////////////////////
 //功能：数组初始化
 //输入：uint8_t* ptr 数组首地址, uint8_t num初始化的值, uint8_t size数组大小
@@ -879,6 +914,7 @@ void image_main()
     if(coun <5000)
         img_protect = 0;
     head_clear();
+    zebra_change=check_zebra();
     search_white_range();
     find_all_connect();
     find_road();
